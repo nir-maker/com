@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>דיווח ציוד מחשובי שנפגע</title>
+  <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *{box-sizing:border-box;}
+    body{margin:0;padding:1rem;font-family:"Assistant",sans-serif;background:#f7f7f7;display:flex;flex-direction:column;align-items:center;}
+    h1{font-size:1.4rem;margin-bottom:1rem;}
+    form{width:100%;max-width:420px;background:#fff;padding:1rem 1.2rem;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.12);display:flex;flex-direction:column;gap:.8rem;}
+    label{font-weight:600;}
+    input[type="text"],input[type="number"]{width:100%;padding:.6rem .8rem;border:1px solid #ccc;border-radius:8px;font-size:1rem;}
+    button{border:none;border-radius:8px;padding:.6rem .8rem;font-size:1rem;cursor:pointer;transition:background .2s;}
+    #addBtn{background:#4caf50;color:#fff;}
+    #addBtn:hover{background:#43a047;}
+    #exportBtn{background:#1976d2;color:#fff;margin-top:1rem;width:100%;max-width:420px;}
+    #exportBtn:hover{background:#1565c0;}
+    ul{list-style:none;margin:1.5rem 0 0;padding:0;width:100%;max-width:420px;}
+    li{background:#fff;border-radius:8px;padding:.75rem 1rem;margin-bottom:.6rem;display:flex;justify-content:space-between;align-items:center;box-shadow:0 1px 4px rgba(0,0,0,.08);font-size:.95rem;}
+    .classHeader{background:#e0e0e0;font-weight:700;cursor:default;box-shadow:none;}
+    .deleteBtn{background:#f44336;color:#fff;padding:.4rem .6rem;font-size:.9rem;}
+    .deleteBtn:hover{background:#d32f2f;}
+  </style>
+</head>
+<body>
+  <h1>דיווח ציוד מחשובי שנפגע</h1>
+  <form id="damageForm">
+    <div>
+      <label for="className">שם הכיתה</label>
+      <input type="text" id="className" placeholder="לדוגמה: ח'1" required />
+    </div>
+    <div>
+      <label for="equipmentType">סוג ציוד שנפגע</label>
+      <input type="text" id="equipmentType" placeholder="למשל: מקלדת" required />
+    </div>
+    <div>
+      <label for="equipmentQty">כמות מכשירים שנפגעו</label>
+      <input type="number" id="equipmentQty" min="1" placeholder="לדוגמה: 3" required />
+    </div>
+    <button type="submit" id="addBtn">הוסף לרשימה</button>
+  </form>
+
+  <ul id="itemsList"></ul>
+
+  <button id="exportBtn" type="button">ייצא CSV</button>
+
+  <script>
+    document.addEventListener("DOMContentLoaded",()=>{
+      const form=document.getElementById("damageForm");
+      const classInput=document.getElementById("className");
+      const typeInput=document.getElementById("equipmentType");
+      const qtyInput=document.getElementById("equipmentQty");
+      const listEl=document.getElementById("itemsList");
+      const exportBtn=document.getElementById("exportBtn");
+
+      let items=JSON.parse(localStorage.getItem("damagedEquipmentList"))||[];
+
+      const saveToStorage=()=>{
+        localStorage.setItem("damagedEquipmentList",JSON.stringify(items));
+      };
+
+      const renderList=()=>{
+        // מיון הפריטים
+        const sorted=[...items].sort((a,b)=>{
+          const c=a.class.localeCompare(b.class,'he',{numeric:true});
+          return c!==0?c:a.type.localeCompare(b.type,'he',{numeric:true});
+        });
+
+        // קיבוץ לפי כיתה
+        const grouped=sorted.reduce((map,item)=>{
+          if(!map.has(item.class)) map.set(item.class,[]);
+          map.get(item.class).push(item);
+          return map;
+        },new Map());
+
+        listEl.innerHTML="";
+        grouped.forEach((arr,className)=>{
+          // כותרת כיתה
+          const header=document.createElement("li");
+          header.className="classHeader";
+          header.textContent=className;
+          listEl.appendChild(header);
+
+          arr.forEach(item=>{
+            const li=document.createElement("li");
+            li.innerHTML=`<span>${item.type} – ${item.qty}</span>`;
+            const delBtn=document.createElement("button");
+            delBtn.textContent="🗑";
+            delBtn.className="deleteBtn";
+            delBtn.title="מחק";
+            delBtn.addEventListener("click",()=>{
+              const realIdx=items.findIndex(e=>e===item);
+              items.splice(realIdx,1);
+              saveToStorage();
+              renderList();
+            });
+            li.appendChild(delBtn);
+            listEl.appendChild(li);
+          });
+        });
+      };
+
+      form.addEventListener("submit",e=>{
+        e.preventDefault();
+        const classVal=classInput.value.trim();
+        const typeVal=typeInput.value.trim();
+        const qtyVal=parseInt(qtyInput.value,10);
+        if(!classVal||!typeVal||isNaN(qtyVal)||qtyVal<=0){
+          alert("אנא מלא/י נתונים תקינים.");
+          return;
+        }
+        items.push({class:classVal,type:typeVal,qty:qtyVal});
+        saveToStorage();
+        renderList();
+        classInput.value="";
+        typeInput.value="";
+        qtyInput.value="";
+        classInput.focus();
+      });
+
+      const convertToCSV=arr=>{
+        const header=["כיתה","סוג ציוד","כמות"];
+        const rows=arr.map(i=>[i.class,i.type,i.qty]);
+        return [header,...rows].map(r=>r.join(",")).join("\n");
+      };
+
+      exportBtn.addEventListener("click",()=>{
+        if(items.length===0){
+          alert("אין פריטים לייצא.");
+          return;
+        }
+        const sorted=[...items].sort((a,b)=>a.class.localeCompare(b.class,'he',{numeric:true}));
+        const csv=convertToCSV(sorted);
+        const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
+        const url=URL.createObjectURL(blob);
+        const link=document.createElement("a");
+        link.href=url;
+        link.download="damaged_equipment.csv";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      });
+
+      // רינדור ראשוני
+      renderList();
+    });
+  </script>
+</body>
+</html>
